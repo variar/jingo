@@ -8,6 +8,7 @@ package jingo
 // `.String()` stringer functionality which is somewhat out of our control.
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -107,6 +108,32 @@ func NewStructEncoder(t interface{}) *StructEncoder {
 		/// support calling .JSONEncode(*Buffer) when the 'encoder' option is passed
 		case opts.Contains("encoder"):
 			e.optInstrEncoder()
+
+		// support types that implement json.Marshaler when the 'fallback' option is passed
+		case opts.Contains("fallback"):
+
+			t := reflect.ValueOf(e.t).Field(e.i).Type()
+			if e.f.Type.Kind() == reflect.Ptr {
+				t = t.Elem()
+			}
+
+			conv := func(v unsafe.Pointer, w *Buffer) {
+				e, ok := reflect.NewAt(t, v).Interface().(json.Marshaler)
+				if !ok {
+					w.Write(null)
+					return
+				}
+				if data, err := e.MarshalJSON(); err == nil {
+					w.Write(data)
+				}
+			}
+
+			if e.f.Type.Kind() == reflect.Ptr {
+				e.ptrval(conv)
+			} else {
+				e.val(conv)
+			}
+			continue
 
 		/// support writing byteslice-like items using 'raw' option.
 		case opts.Contains("raw"):
